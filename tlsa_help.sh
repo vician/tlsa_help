@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ### CONSTANTS ###
-DEBUG=1
+DEBUG=0
 CHOSE_FIRST_MX=0
 DNS_SERVER="@8.8.8.8"
 
@@ -15,6 +15,7 @@ PORT=""
 HASH_FUNCTION=""
 SELECTOR_FUNCTION=""
 SHOW_CERTIFICATES=0
+CERTIFICATE_INDEX=0
 
 function help {
     cat << EndOfHelp
@@ -106,44 +107,28 @@ function which_selector {
     fi
 }
 
-function get_end_certificate {
-    port_fix
-    which_hash
-    which_selector
-
-    openssl s_client -showcerts -connect $TARGET_SERVER:$PORT < /dev/null 2>/dev/null | $SELECTOR_FUNCTION | openssl x509 -outform der | $HASH_FUNCTION
-}
-
-function get_ca_certificate {
-
-    port_fix
-
-    openssl s_client -showcerts -connect $TARGET_SERVER:$PORT < /dev/null 2>/dev/null | grep 'CN' | grep 's:'
-
-    echo ${certs}
-
-    #echo "loaded `echo -e ${certs} | wc -l` for $DOMAIN:$PORT"
-
-}
-
 function get_certificate {
     debug "MAIL: $TARGET_SERVER HASH: $HASH_FUNCTION, SELECTOR: $SELECTOR_FUNCTION, DER: $DER_FUNCTION"
 
-
-    if [ "$USAGE" = 3 ] || [ "$USAGE" = 1 ]; then
-        nth=1
+    if [ $CERTIFICATE_INDEX -ne 0 ]; then
+        debug "Automatic selecting certificate with index $CERTIFICATE_INDEX"
+        nth=$CERTIFICATE_INDEX
     else
-        echo "Found these certificates"
-        openssl s_client -showcerts -connect $TARGET_SERVER:$PORT < /dev/null 2>/dev/null | grep 'CN' | grep 's:'
-        echo "Select the certificate [0-N]"
-        read nth
 
-        if [ "$nth" = 0 ]; then
-            echo "WARNING: You chose end certificate, but selector was set to use Authority"
+        if [ "$USAGE" = 3 ] || [ "$USAGE" = 1 ]; then
+            nth=1
+        else
+            echo "Found these certificates"
+            openssl s_client -showcerts -connect $TARGET_SERVER:$PORT < /dev/null 2>/dev/null | grep 'CN' | grep 's:'
+            echo "Select the certificate [0-N]"
+            read nth
+
+            if [ "$nth" = 0 ]; then
+                echo "WARNING: You chose end certificate, but selector was set to use Authority"
+            fi
+            let nth++
         fi
-        let nth++
     fi
-    #nth=1
 
     #openssl s_client -showcerts -connect $TARGET_SERVER:$PORT < /dev/null 2>/dev/null 
     #echo "==========================="
@@ -158,7 +143,7 @@ function get_certificate {
 }
 
 OPTIND=1
-while getopts 'u:s:m:hdn:x:c' opt; do
+while getopts 'u:s:m:hdn:x:ci:f' opt; do
   case "$opt" in
     u)
       USAGE=$OPTARG ;;
@@ -178,6 +163,10 @@ while getopts 'u:s:m:hdn:x:c' opt; do
       TARGET_SERVER="$OPTARG";;
     c)
       SHOW_CERTIFICATES=1;;
+    i)
+      CERTIFICATE_INDEX="$OPTARG";;
+    f)
+      CHOSE_FIRST_MX=1 ;;
     ?)
       echo "ERROR: Wrong arguments";;
   esac
